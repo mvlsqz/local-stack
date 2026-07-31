@@ -73,6 +73,73 @@ After applying the fix, the node should become `Ready` and Flannel pods should s
 
 On Arch-based hosts, always load `br_netfilter` and enable `bridge-nf-call-iptables` before running a Kubernetes cluster or vCluster with a CNI that relies on iptables.
 
+## StorageClass `reclaimPolicy` Is Immutable
+
+**Date:** 2026-07-31
+**Context:** After fixing the local-path-provisioner ConfigMap, Argo CD stayed `OutOfSync` on the platform app because it could not reconcile the `local-path` StorageClass.
+
+### Symptom
+
+- `local-path-provisioner` application in Argo CD showed `OutOfSync` but `Healthy`.
+- Argo CD events reported:
+  ```
+  StorageClass.storage.k8s.io "local-path" is invalid: reclaimPolicy: Forbidden: updates to reclaimPolicy are forbidden.
+  ```
+- After deleting the StorageClass, Argo CD recreated it with `reclaimPolicy: Delete` even though the Git manifest specified `Retain`.
+
+### Root Cause
+
+1. `reclaimPolicy` is an immutable field on `StorageClass` objects. Once a StorageClass is created, Kubernetes rejects any patch that tries to change it.
+2. The live StorageClass had `reclaimPolicy: Delete`, likely created by the local-path-provisioner defaults or an earlier sync.
+3. Argo CD's repo-server cached a stale generated manifest. After deleting the StorageClass, Argo CD recreated it from the cache instead of the latest Git commit, so it came back as `Delete`.
+
+### Fix
+
+Delete the StorageClass and force Argo CD to do a hard refresh before it recreates the resource:
+
+```bash
+vcluster connect hub01
+
+# Delete the stale StorageClass
+kubectl delete storageclass local-path
+
+# Force a hard refresh of the Argo CD app
+kubectl annotate application -n argocd local-path-provisioner argocd.argoproj.io/refresh=hard
+
+# Clear Argo CD's manifest cache
+kubectl delete pod -n argocd -l app.kubernetes.io/name=argocd-repo-server
+kubectl delete pod -n argocd -l app.kubernetes.io/name=argocd-application-controller
+```
+
+Then verify:
+
+```bash
+kubectl get storageclass local-path -o yaml | grep reclaimPolicy
+kubectl get applications -n argocd
+```
+
+### If It Still Recreates with the Wrong Policy
+
+Apply the manifest manually after deleting the bad StorageClass:
+
+```bash
+kubectl delete storageclass local-path
+kubectl apply -f ~/local-stack/platform/local-path-provisioner/storage-class.yaml
+```
+
+### Takeaway
+
+- `StorageClass.reclaimPolicy` is immutable. To change it, you must delete and recreate the StorageClass.
+- When a GitOps tool recreates a resource with the wrong state, clear the repo-server cache and force a hard refresh rather than repeatedly deleting the live object.
+- Deleting a StorageClass does **not** delete existing PVs or PVCs — it only removes the provisioning template.
+
+### References
+
+- [Kubernetes StorageClasses](https://kubernetes.io/docs/concepts/storage/storage-classes/)
+- [Argo CD Hard Refresh](https://argo-cd.readthedocs.io/en/stable/user-guide/commands/argocd_app/#hard-refresh)
+
+---
+
 ### References
 
 - [Kubernetes Network Plugin Requirements](https://kubernetes.io/docs/concepts/extend-kubernetes/compute-storage-net/network-plugins/#network-plugin-requirements)
