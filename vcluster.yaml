@@ -1,0 +1,12 @@
+# vcluster.yaml
+experimental:
+  docker:
+    nodes:
+      - name: hub01
+    volumes:
+      - /data/vcluster:/data/vcluster
+controlPlane:
+  distro:
+    k8s:
+      image:
+        tag: v1.30.0

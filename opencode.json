@@ -1,0 +1,10 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  "instructions": ["AGENTS.md"],
+  "share": "manual",
+  "snapshot": true,
+  "compaction": {
+    "auto": true,
+    "tail_turns": 15
+  }
+}
