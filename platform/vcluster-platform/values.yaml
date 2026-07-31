@@ -1,0 +1,14 @@
+# Minimal vCluster Platform values
+# Reference: https://www.vcluster.com/docs/platform/install/helm
+replicaCount: 1
+persistence:
+  enabled: true
+  storageClass: local-path
+  size: 5Gi
+resources:
+  requests:
+    memory: "512Mi"
+    cpu: "250m"
+  limits:
+    memory: "1Gi"
+    cpu: "500m"
