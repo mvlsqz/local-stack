@@ -1,0 +1,23 @@
+apiVersion: source.toolkit.fluxcd.io/v1
+kind: GitRepository
+metadata:
+  name: local-stack
+  namespace: flux-system
+spec:
+  interval: 1m
+  url: https://github.com/mvlsqz/local-stack.git
+  ref:
+    branch: main
+---
+apiVersion: kustomize.toolkit.fluxcd.io/v1
+kind: Kustomization
+metadata:
+  name: apps
+  namespace: flux-system
+spec:
+  interval: 10m
+  path: ./apps
+  prune: true
+  sourceRef:
+    kind: GitRepository
+    name: local-stack
