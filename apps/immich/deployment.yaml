@@ -1,0 +1,82 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: immich-server
+  namespace: immich
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: immich-server
+  template:
+    metadata:
+      labels:
+        app: immich-server
+    spec:
+      containers:
+        - name: immich-server
+          image: ghcr.io/immich-app/immich-server:release
+          ports:
+            - containerPort: 2283
+          env:
+            - name: IMMICH_MACHINE_LEARNING_ENABLED
+              value: "false"
+            - name: IMMICH_TELEMETRY_INCLUDE_SENSITIVE
+              value: "false"
+            - name: DB_HOSTNAME
+              value: localhost
+            - name: DB_USERNAME
+              value: immich
+            - name: DB_PASSWORD
+              value: immich
+            - name: DB_DATABASE_NAME
+              value: immich
+            - name: REDIS_HOSTNAME
+              value: localhost
+            - name: UPLOAD_LOCATION
+              value: /usr/src/app/upload
+          volumeMounts:
+            - name: uploads
+              mountPath: /usr/src/app/upload
+          resources:
+            requests:
+              memory: "512Mi"
+              cpu: "500m"
+            limits:
+              memory: "1Gi"
+              cpu: "1000m"
+        - name: immich-postgres
+          image: docker.io/tensorchord/pgvecto-rs:pg14-v0.2.0
+          env:
+            - name: POSTGRES_USER
+              value: immich
+            - name: POSTGRES_PASSWORD
+              value: immich
+            - name: POSTGRES_DB
+              value: immich
+          volumeMounts:
+            - name: postgres
+              mountPath: /var/lib/postgresql/data
+          resources:
+            requests:
+              memory: "256Mi"
+              cpu: "250m"
+            limits:
+              memory: "512Mi"
+              cpu: "500m"
+        - name: immich-redis
+          image: docker.io/redis:6.2-alpine
+          resources:
+            requests:
+              memory: "128Mi"
+              cpu: "100m"
+            limits:
+              memory: "256Mi"
+              cpu: "250m"
+      volumes:
+        - name: uploads
+          persistentVolumeClaim:
+            claimName: immich-uploads
+        - name: postgres
+          persistentVolumeClaim:
+            claimName: immich-postgres
