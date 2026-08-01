@@ -13,7 +13,7 @@ rules:
     resources: ["nodes", "persistentvolumeclaims", "configmaps"]
     verbs: ["get", "list", "watch"]
   - apiGroups: [""]
-    resources: ["endpoints", "persistentvolumes", "pods"]
+    resources: ["endpoints", "persistentvolumes", "pods", "pods/log"]
     verbs: ["*"]
   - apiGroups: [""]
     resources: ["events"]
