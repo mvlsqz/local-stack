@@ -577,6 +577,7 @@ Look for `OOMKilled` or `Reason: Error` events. After increasing limits, the pod
 - Set `DB_VECTOR_EXTENSION=pgvector` explicitly to avoid auto-detection issues.
 - Use `IMMICH_WORKERS_EXCLUDE=microservices` to avoid microservices worker crashes in single-container, resource-constrained deployments. The web UI and uploads will still work; background jobs will not run.
 - Postgres inside the same pod as Immich can OOM during admin creation and migrations. Give it at least 1Gi limit.
+- If Postgres is killed uncleanly (OOM or SIGKILL), the WAL can be corrupted. The recovery log shows errors like `invalid magic number`, `invalid primary checkpoint record`, and `could not locate a valid checkpoint record`. On a fresh setup with no data, the simplest fix is to delete the `immich-postgres` PVC and let it reinitialize.
 - For a production setup, run the API server, microservices worker, Postgres, and Redis as separate containers with proper resource allocation.
 - Pin the Immich image tag to a specific version (e.g., `v1.131.3`) instead of `release` to avoid unexpected version changes.
 
