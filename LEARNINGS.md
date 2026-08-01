@@ -185,7 +185,7 @@ Also, the provisioner needs `pods/log` permission to read helper pod logs.
 
 ### Fix
 
-Change the `nodePathMap` entry in the ConfigMap:
+Change the `nodePathMap` entry in the ConfigMap, and add the required `setup` and `teardown` scripts and a proper `helperPod.yaml` template:
 
 ```yaml
 apiVersion: v1
@@ -203,31 +203,37 @@ data:
         }
       ]
     }
+  setup: |
+    #!/bin/sh
+    set -eu
+    mkdir -m 0777 -p "$VOL_DIR"
+  teardown: |
+    #!/bin/sh
+    set -eu
+    rm -rf "$VOL_DIR"
   helperPod.yaml: |
     apiVersion: v1
     kind: Pod
     metadata:
       name: helper-pod
     spec:
+      priorityClassName: system-node-critical
+      tolerations:
+        - key: node.kubernetes.io/disk-pressure
+          operator: Exists
+          effect: NoSchedule
       containers:
         - name: helper-pod
           image: busybox
           imagePullPolicy: IfNotPresent
 ```
 
-Update the Deployment volume mount and hostPath:
-
-```yaml
-volumeMounts:
-  - name: local-path-base
-    mountPath: /data/vcluster/k8s-volumes
-
-volumes:
-  - name: local-path-base
-    hostPath:
-      path: /data/vcluster/k8s-volumes
-      type: DirectoryOrCreate
+The `setup` and `teardown` scripts are mounted into the helper pod at `/script/setup` and `/script/teardown`. Without them, the helper pod fails with:
 ```
+MountVolume.SetUp failed for volume "script": configmap references non-existent config key: setup
+```
+
+The local-path-provisioner Deployment only needs to mount the ConfigMap, not the host directory. The host directory is mounted by the helper pods that the provisioner creates.
 
 Update the RBAC to allow reading helper pod logs:
 
@@ -264,6 +270,7 @@ PVCs should move from `Pending` to `Bound`, and PVs should be created under `/da
 - Use `DEFAULT_PATH_FOR_ALL_LISTED_NODES` only when you have explicit node entries and want them to share the same path.
 - The local-path-provisioner error message is explicit: read the key it asks for and update the ConfigMap accordingly.
 - In a vCluster Docker setup, ensure the local-path base directory is mounted from the host. Otherwise, data is not persistent and helper pods may time out.
+- The local-path-provisioner ConfigMap must include `setup` and `teardown` scripts. The helper pod mounts them as a `script` volume.
 - The local-path-provisioner service account needs `pods/log` access to read helper pod logs.
 
 ### References
