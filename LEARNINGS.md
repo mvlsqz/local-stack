@@ -280,6 +280,77 @@ PVCs should move from `Pending` to `Bound`, and PVs should be created under `/da
 
 ---
 
+## Tailscale MagicDNS Does Not Resolve Service Subdomains Automatically
+
+**Date:** 2026-07-31
+**Context:** All Kubernetes services are running, but `curl -I http://git.hub01.quetzal-quillback.ts.net` fails with `Could not resolve host`.
+
+### Symptom
+
+- All pods are Running, all Ingresses exist, and all Argo CD / Flux resources are synced.
+- `curl` against `http://git.hub01.quetzal-quillback.ts.net`, `http://draw.hub01.quetzal-quillback.ts.net`, and `http://photos.hub01.quetzal-quillback.ts.net` returns `Could not resolve host`.
+
+### Root Cause
+
+Tailscale MagicDNS creates a DNS record for the machine itself (e.g., `hub01.quetzal-quillback.ts.net`), but it does not automatically create subdomains for individual services running inside the vCluster. The Kubernetes Ingresses use host-based routing, but those hostnames are not known to Tailscale DNS.
+
+### Workaround: Test from the Cluster Without Tailscale DNS
+
+From `hub01`, test the services using the Traefik service IP and the correct `Host` header:
+
+```bash
+vcluster connect hub01
+TRAEFIK_IP=$(kubectl get svc -n traefik -o jsonpath='{.items[0].spec.clusterIP}')
+
+curl -I -H "Host: git.hub01.quetzal-quillback.ts.net" http://$TRAEFIK_IP
+curl -I -H "Host: draw.hub01.quetzal-quillback.ts.net" http://$TRAEFIK_IP
+curl -I -H "Host: photos.hub01.quetzal-quillback.ts.net" http://$TRAEFIK_IP
+```
+
+### Options for Remote Access
+
+#### Option 1: Tailscale Serve (simple, private to tailnet)
+
+Expose the Traefik port on `hub01` under the machine's Tailscale name:
+
+```bash
+sudo tailscale serve --bg --set-path=/ http://localhost:80
+```
+
+Then access services by passing the Ingress `Host` header:
+
+```bash
+curl -I -H "Host: git.hub01.quetzal-quillback.ts.net" https://hub01.quetzal-quillback.ts.net
+```
+
+#### Option 2: Tailscale Funnel (public internet, Tailscale-authenticated)
+
+```bash
+sudo tailscale funnel --bg --set-path=/ http://localhost:80
+```
+
+#### Option 3: Separate Tailscale Serve Hosts for Each Service
+
+Use `tailscale serve` with different ports or paths and point a local reverse proxy to each service. For example, map `/git` to Forgejo, `/draw` to Excalidraw, and `/photos` to Immich.
+
+#### Option 4: Custom DNS with Subdomains
+
+If you want the exact `git.hub01...` subdomains, you need to manage DNS records yourself (e.g., via a public DNS provider or a custom DNS server that Tailscale uses as a split DNS server). This is more complex and usually not needed for a homelab.
+
+### Takeaway
+
+- Tailscale MagicDNS only resolves the machine name, not arbitrary subdomains for services inside the cluster.
+- To expose services, use Tailscale serve/funnel on `hub01` or manage external DNS records.
+- For testing, use the Traefik cluster IP with the correct `Host` header.
+
+### References
+
+- [Tailscale Serve](https://tailscale.com/kb/1242/tailscale-serve)
+- [Tailscale Funnel](https://tailscale.com/kb/1223/tailscale-funnel)
+- [Tailscale MagicDNS](https://tailscale.com/kb/1081/magicdns)
+
+---
+
 ### References
 
 - [Kubernetes StorageClasses](https://kubernetes.io/docs/concepts/storage/storage-classes/)
