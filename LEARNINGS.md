@@ -446,16 +446,65 @@ kubectl logs -n immich deployment/immich-server -c immich-postgres
 
 The Immich server should start without the `No vector extension found` error, and the `curl` to `https://photos.quetzal-quillback.ts.net` should return HTTP 200.
 
+### Follow-up: Reverse Geocoding Causes Microservices Worker Crash
+
+After fixing the Postgres extension, the Immich UI came up but the microservices worker crashed during admin account creation with:
+
+```
+[Nest] 7  - 08/01/2026, 1:25:16 AM   ERROR [Microservices:MetadataService] Unable to initialize reverse geocoding: AggregateError
+AggregateError [ECONNREFUSED]:
+    at internalConnectMultiple (node:net:1142:49)
+    at afterConnectMultiple (node:net:1723:7)
+Error: Metadata service init failed
+```
+
+Immich's microservices worker initializes the reverse geocoding service at startup. In this single-container deployment, the worker tries to connect to the API server before it is fully ready, or the service needs network access that is not available in this environment. The result is a `ECONNREFUSED` error and the microservices worker exits, which kills the whole container.
+
+### Fix
+
+Disable reverse geocoding by adding an environment variable to the `immich-server` container:
+
+```yaml
+- name: immich-server
+  image: ghcr.io/immich-app/immich-server:release
+  env:
+    - name: IMMICH_MACHINE_LEARNING_ENABLED
+      value: "false"
+    - name: IMMICH_TELEMETRY_INCLUDE_SENSITIVE
+      value: "false"
+    - name: REVERSE_GEOCODING_ENABLED
+      value: "false"
+    # ... remaining env vars
+```
+
+Then restart the deployment:
+
+```bash
+kubectl rollout restart deployment/immich-server -n immich
+kubectl rollout status deployment/immich-server -n immich
+```
+
+### Verification
+
+```bash
+kubectl logs -n immich deployment/immich-server -c immich-server
+```
+
+The microservices worker should start without the `Metadata service init failed` error, and the Immich web UI should allow creating the admin account.
+
 ### Takeaway
 
 - Immich requires a PostgreSQL vector extension. The `pgvector/pgvector` image is the most compatible choice.
 - When switching Postgres images, the data directory must be reinitialized. In a fresh setup, deleting the PVC is the simplest fix.
+- Disabling reverse geocoding (`REVERSE_GEOCODING_ENABLED=false`) avoids a microservices worker startup race/network issue in single-container deployments.
+- For a production setup, run the API server and microservices worker as separate containers with proper resource allocation and network access.
 - Pin the Immich image tag to a specific version (e.g., `v1.131.3`) instead of `release` to avoid unexpected version changes.
 
 ### References
 
 - [Immich PostgreSQL Requirements](https://immich.app/docs/install/requirements#postgresql)
 - [pgvector Docker Image](https://github.com/pgvector/pgvector#docker)
+- [Immich Environment Variables](https://immich.app/docs/install/environment-variables)
 
 ---
 
