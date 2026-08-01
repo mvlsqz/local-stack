@@ -133,14 +133,86 @@ kubectl apply -f ~/local-stack/platform/local-path-provisioner/storage-class.yam
 - When a GitOps tool recreates a resource with the wrong state, clear the repo-server cache and force a hard refresh rather than repeatedly deleting the live object.
 - Deleting a StorageClass does **not** delete existing PVs or PVCs — it only removes the provisioning template.
 
+## Local-Path-Provisioner Requires `DEFAULT_PATH_FOR_NON_LISTED_NODES`
+
+**Date:** 2026-07-31
+**Context:** Apps (Forgejo, Immich) and vCluster Platform pods were stuck in `Pending` because their PVCs could not be provisioned.
+
+### Symptom
+
+- Pods showed `FailedScheduling` with:
+  ```
+  running PreBind plugin "VolumeBinding": binding volumes: context deadline exceeded
+  ```
+- `local-path-provisioner` logs showed:
+  ```
+  failed to provision volume with StorageClass "local-path": config doesn't contain node hub01,
+  and no DEFAULT_PATH_FOR_NON_LISTED_NODES available
+  ```
+- `kubectl get pvc -A` showed all PVCs in `Pending` state.
+
+### Root Cause
+
+The `local-path-provisioner` ConfigMap used `DEFAULT_PATH_FOR_ALL_LISTED_NODES` as the node key. This key only applies to nodes that are explicitly listed in the `nodePathMap`. Since no nodes were explicitly listed, the provisioner could not find a path for any node, including `hub01` and `home-lab01`.
+
+The correct key for a catch-all path is `DEFAULT_PATH_FOR_NON_LISTED_NODES`.
+
+### Fix
+
+Change the `nodePathMap` entry in the ConfigMap:
+
+```yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: local-path-config
+  namespace: local-path-storage
+data:
+  config.json: |
+    {
+      "nodePathMap": [
+        {
+          "node": "DEFAULT_PATH_FOR_NON_LISTED_NODES",
+          "paths": ["/data/k8s-volumes"]
+        }
+      ]
+    }
+```
+
+After updating the ConfigMap, restart the provisioner and delete the old PVCs so they are re-provisioned:
+
+```bash
+kubectl rollout restart deployment/local-path-provisioner -n local-path-storage
+kubectl delete pvc --all -n forgejo
+kubectl delete pvc --all -n immich
+kubectl delete pvc --all -n vcluster-platform
+```
+
+### Verification
+
+```bash
+kubectl get pvc -A
+kubectl get pv
+kubectl logs -n local-path-storage deployment/local-path-provisioner
+```
+
+PVCs should move from `Pending` to `Bound`, and PVs should be created under `/data/k8s-volumes`.
+
+### Takeaway
+
+- Use `DEFAULT_PATH_FOR_NON_LISTED_NODES` when you want a single path for all nodes that are not explicitly named in the `nodePathMap`.
+- Use `DEFAULT_PATH_FOR_ALL_LISTED_NODES` only when you have explicit node entries and want them to share the same path.
+- The local-path-provisioner error message is explicit: read the key it asks for and update the ConfigMap accordingly.
+
 ### References
 
-- [Kubernetes StorageClasses](https://kubernetes.io/docs/concepts/storage/storage-classes/)
-- [Argo CD Hard Refresh](https://argo-cd.readthedocs.io/en/stable/user-guide/commands/argocd_app/#hard-refresh)
+- [local-path-provisioner Configuration](https://github.com/rancher/local-path-provisioner#configuration)
 
 ---
 
 ### References
 
+- [Kubernetes StorageClasses](https://kubernetes.io/docs/concepts/storage/storage-classes/)
+- [Argo CD Hard Refresh](https://argo-cd.readthedocs.io/en/stable/user-guide/commands/argocd_app/#hard-refresh)
 - [Kubernetes Network Plugin Requirements](https://kubernetes.io/docs/concepts/extend-kubernetes/compute-storage-net/network-plugins/#network-plugin-requirements)
 - [Flannel Troubleshooting](https://github.com/flannel-io/flannel/blob/master/Documentation/troubleshooting.md)
