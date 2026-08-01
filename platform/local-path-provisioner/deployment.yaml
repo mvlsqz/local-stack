@@ -27,8 +27,6 @@ spec:
           volumeMounts:
             - name: config-volume
               mountPath: /etc/config
-            - name: local-path-base
-              mountPath: /data/vcluster/k8s-volumes
           env:
             - name: POD_NAMESPACE
               valueFrom:
@@ -38,7 +36,3 @@ spec:
         - name: config-volume
           configMap:
             name: local-path-config
-        - name: local-path-base
-          hostPath:
-            path: /data/vcluster/k8s-volumes
-            type: DirectoryOrCreate
