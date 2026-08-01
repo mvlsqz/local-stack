@@ -446,9 +446,9 @@ kubectl logs -n immich deployment/immich-server -c immich-postgres
 
 The Immich server should start without the `No vector extension found` error, and the `curl` to `https://photos.quetzal-quillback.ts.net` should return HTTP 200.
 
-### Follow-up: Reverse Geocoding Causes Microservices Worker Crash
+### Follow-up: Microservices Worker Crashes in Single-Container Deployment
 
-After fixing the Postgres extension, the Immich UI came up but the microservices worker crashed during admin account creation with:
+After fixing the Postgres extension, the Immich UI came up but the microservices worker crashed during admin account creation with errors like:
 
 ```
 [Nest] 7  - 08/01/2026, 1:25:16 AM   ERROR [Microservices:MetadataService] Unable to initialize reverse geocoding: AggregateError
@@ -458,11 +458,21 @@ AggregateError [ECONNREFUSED]:
 Error: Metadata service init failed
 ```
 
-Immich's microservices worker initializes the reverse geocoding service at startup. In this single-container deployment, the worker tries to connect to the API server before it is fully ready, or the service needs network access that is not available in this environment. The result is a `ECONNREFUSED` error and the microservices worker exits, which kills the whole container.
+and later:
+
+```
+Query failed : {
+  error: Error: read ECONNRESET
+      at TCP.onStreamRead (node:internal/stream_base_commons:216:20),
+  sql: 'SELECT pg_advisory_unlock($1)'
+}
+```
+
+`REVERSE_GEOCODING_ENABLED` is not a valid Immich environment variable, so setting it had no effect. The real issue is that the microservices worker in Immich v3.1.0 is unstable when co-located with the API server, Redis, and Postgres in a single pod under tight resources. It repeatedly fails during initialization and takes the whole container down.
 
 ### Fix
 
-Disable reverse geocoding by adding an environment variable to the `immich-server` container:
+Exclude the `microservices` worker and explicitly set the vector extension to `pgvector`:
 
 ```yaml
 - name: immich-server
@@ -472,8 +482,10 @@ Disable reverse geocoding by adding an environment variable to the `immich-serve
       value: "false"
     - name: IMMICH_TELEMETRY_INCLUDE_SENSITIVE
       value: "false"
-    - name: REVERSE_GEOCODING_ENABLED
-      value: "false"
+    - name: IMMICH_WORKERS_EXCLUDE
+      value: "microservices"
+    - name: DB_VECTOR_EXTENSION
+      value: "pgvector"
     # ... remaining env vars
 ```
 
@@ -488,16 +500,18 @@ kubectl rollout status deployment/immich-server -n immich
 
 ```bash
 kubectl logs -n immich deployment/immich-server -c immich-server
+kubectl get pods -n immich
 ```
 
-The microservices worker should start without the `Metadata service init failed` error, and the Immich web UI should allow creating the admin account.
+The `immich-server` pod should be `3/3` Ready (or `1/1` if only the API worker runs), and the Immich web UI should allow creating the admin account.
 
 ### Takeaway
 
 - Immich requires a PostgreSQL vector extension. The `pgvector/pgvector` image is the most compatible choice.
 - When switching Postgres images, the data directory must be reinitialized. In a fresh setup, deleting the PVC is the simplest fix.
-- Disabling reverse geocoding (`REVERSE_GEOCODING_ENABLED=false`) avoids a microservices worker startup race/network issue in single-container deployments.
-- For a production setup, run the API server and microservices worker as separate containers with proper resource allocation and network access.
+- Set `DB_VECTOR_EXTENSION=pgvector` explicitly to avoid auto-detection issues.
+- Use `IMMICH_WORKERS_EXCLUDE=microservices` to avoid microservices worker crashes in single-container, resource-constrained deployments. The web UI and uploads will still work; background jobs will not run.
+- For a production setup, run the API server, microservices worker, Postgres, and Redis as separate containers with proper resource allocation.
 - Pin the Immich image tag to a specific version (e.g., `v1.131.3`) instead of `release` to avoid unexpected version changes.
 
 ### References
