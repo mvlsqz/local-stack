@@ -46,7 +46,7 @@ spec:
               memory: "1Gi"
               cpu: "1000m"
         - name: immich-postgres
-          image: docker.io/tensorchord/pgvecto-rs:pg14-v0.2.0
+          image: docker.io/pgvector/pgvector:pg14
           env:
             - name: POSTGRES_USER
               value: immich
