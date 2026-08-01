@@ -389,6 +389,76 @@ If you want the exact `git.hub01...` subdomains without the operator, you need t
 
 ---
 
+## Immich Requires `pgvector` Extension
+
+**Date:** 2026-07-31
+**Context:** Immich pod was in `CrashLoopBackOff` and the Tailscale proxy for `photos` returned HTTP 502.
+
+### Symptom
+
+- `kubectl get pods -n immich` showed `immich-server` in `CrashLoopBackOff` with `2/3` ready.
+- Immich server logs showed:
+  ```
+  Error: No vector extension found. Available extensions: vchord, vector
+  microservices worker error: Error: No vector extension found. Available extensions: vchord, vector
+  ```
+- `curl -I https://photos.quetzal-quillback.ts.net` returned `502 Bad Gateway`.
+
+### Root Cause
+
+Immich uses a PostgreSQL vector extension for face and object recognition. The deployment was using `tensorchord/pgvecto-rs:pg14-v0.2.0`, which provides the `vchord`/`pgvecto-rs` extension. Immich v3.1.0 could not detect a compatible vector extension in this image and failed to start the microservices worker.
+
+### Fix
+
+Switch the Postgres container to the official `pgvector` image, which provides the `vector` extension that Immich expects.
+
+```yaml
+- name: immich-postgres
+  image: docker.io/pgvector/pgvector:pg14
+  env:
+    - name: POSTGRES_USER
+      value: immich
+    - name: POSTGRES_PASSWORD
+      value: immich
+    - name: POSTGRES_DB
+      value: immich
+  volumeMounts:
+    - name: postgres
+      mountPath: /var/lib/postgresql/data
+```
+
+Because the existing Postgres data directory was initialized by the old `pgvecto-rs` image, it is not compatible with the new `pgvector` image. Delete the `immich-postgres` PVC so it is recreated and reinitialized:
+
+```bash
+kubectl scale deployment immich-server --replicas=0 -n immich
+kubectl delete pvc immich-postgres -n immich
+flux reconcile kustomization apps --with-source
+kubectl scale deployment immich-server --replicas=1 -n immich
+```
+
+### Verification
+
+```bash
+kubectl get pods -n immich
+kubectl logs -n immich deployment/immich-server -c immich-server
+kubectl logs -n immich deployment/immich-server -c immich-postgres
+```
+
+The Immich server should start without the `No vector extension found` error, and the `curl` to `https://photos.quetzal-quillback.ts.net` should return HTTP 200.
+
+### Takeaway
+
+- Immich requires a PostgreSQL vector extension. The `pgvector/pgvector` image is the most compatible choice.
+- When switching Postgres images, the data directory must be reinitialized. In a fresh setup, deleting the PVC is the simplest fix.
+- Pin the Immich image tag to a specific version (e.g., `v1.131.3`) instead of `release` to avoid unexpected version changes.
+
+### References
+
+- [Immich PostgreSQL Requirements](https://immich.app/docs/install/requirements#postgresql)
+- [pgvector Docker Image](https://github.com/pgvector/pgvector#docker)
+
+---
+
 ### References
 
 - [Kubernetes StorageClasses](https://kubernetes.io/docs/concepts/storage/storage-classes/)
