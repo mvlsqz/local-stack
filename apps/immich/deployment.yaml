@@ -23,8 +23,10 @@ spec:
               value: "false"
             - name: IMMICH_TELEMETRY_INCLUDE_SENSITIVE
               value: "false"
-            - name: REVERSE_GEOCODING_ENABLED
-              value: "false"
+            - name: IMMICH_WORKERS_EXCLUDE
+              value: "microservices"
+            - name: DB_VECTOR_EXTENSION
+              value: "pgvector"
             - name: DB_HOSTNAME
               value: localhost
             - name: DB_USERNAME
