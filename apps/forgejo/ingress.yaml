@@ -3,12 +3,13 @@ kind: Ingress
 metadata:
   name: forgejo
   namespace: forgejo
-  annotations:
-    traefik.ingress.kubernetes.io/router.entrypoints: web
 spec:
+  ingressClassName: tailscale
+  tls:
+    - hosts:
+        - git.hub01
   rules:
-    - host: git.hub01.quetzal-quillback.ts.net
-      http:
+    - http:
         paths:
           - path: /
             pathType: Prefix

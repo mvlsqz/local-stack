@@ -3,12 +3,13 @@ kind: Ingress
 metadata:
   name: immich
   namespace: immich
-  annotations:
-    traefik.ingress.kubernetes.io/router.entrypoints: web
 spec:
+  ingressClassName: tailscale
+  tls:
+    - hosts:
+        - photos.hub01
   rules:
-    - host: photos.hub01.quetzal-quillback.ts.net
-      http:
+    - http:
         paths:
           - path: /
             pathType: Prefix

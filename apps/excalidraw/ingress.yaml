@@ -3,12 +3,13 @@ kind: Ingress
 metadata:
   name: excalidraw
   namespace: excalidraw
-  annotations:
-    traefik.ingress.kubernetes.io/router.entrypoints: web
 spec:
+  ingressClassName: tailscale
+  tls:
+    - hosts:
+        - draw.hub01
   rules:
-    - host: draw.hub01.quetzal-quillback.ts.net
-      http:
+    - http:
         paths:
           - path: /
             pathType: Prefix
