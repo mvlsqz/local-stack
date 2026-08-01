@@ -503,7 +503,72 @@ kubectl logs -n immich deployment/immich-server -c immich-server
 kubectl get pods -n immich
 ```
 
-The `immich-server` pod should be `3/3` Ready (or `1/1` if only the API worker runs), and the Immich web UI should allow creating the admin account.
+The `immich-server` pod should be `3/3` Ready, and the Immich web UI should allow creating the admin account.
+
+### Follow-up: Postgres Is Killed by Immediate Shutdown
+
+If the admin account creation still fails with Postgres warnings like:
+
+```
+Postgres notice: {
+  severity_local: 'WARNING',
+  severity: 'WARNING',
+  code: '57P01',
+  message: 'terminating connection due to immediate shutdown command',
+  file: 'postgres.c',
+  line: '2893',
+  routine: 'quickdie'
+}
+```
+
+the Postgres container is being killed, most likely because it is hitting its memory limit (OOM). In a single-container Immich deployment, the API server, Postgres, and Redis all compete for the same pod memory. Admin account creation triggers migrations and writes that can push Postgres over its limit.
+
+Increase the memory requests and limits for all three containers:
+
+```yaml
+- name: immich-server
+  resources:
+    requests:
+      memory: "1Gi"
+      cpu: "500m"
+    limits:
+      memory: "2Gi"
+      cpu: "1000m"
+
+- name: immich-postgres
+  resources:
+    requests:
+      memory: "512Mi"
+      cpu: "250m"
+    limits:
+      memory: "1Gi"
+      cpu: "500m"
+
+- name: immich-redis
+  resources:
+    requests:
+      memory: "256Mi"
+      cpu: "100m"
+    limits:
+      memory: "512Mi"
+      cpu: "250m"
+```
+
+Then restart the deployment:
+
+```bash
+kubectl rollout restart deployment/immich-server -n immich
+kubectl rollout status deployment/immich-server -n immich
+```
+
+### Verification
+
+```bash
+kubectl describe pod -n immich <immich-pod-name>
+kubectl get events -n immich --sort-by='.lastTimestamp'
+```
+
+Look for `OOMKilled` or `Reason: Error` events. After increasing limits, the pod should be `3/3` Ready and the admin account creation should succeed.
 
 ### Takeaway
 
@@ -511,6 +576,7 @@ The `immich-server` pod should be `3/3` Ready (or `1/1` if only the API worker r
 - When switching Postgres images, the data directory must be reinitialized. In a fresh setup, deleting the PVC is the simplest fix.
 - Set `DB_VECTOR_EXTENSION=pgvector` explicitly to avoid auto-detection issues.
 - Use `IMMICH_WORKERS_EXCLUDE=microservices` to avoid microservices worker crashes in single-container, resource-constrained deployments. The web UI and uploads will still work; background jobs will not run.
+- Postgres inside the same pod as Immich can OOM during admin creation and migrations. Give it at least 1Gi limit.
 - For a production setup, run the API server, microservices worker, Postgres, and Redis as separate containers with proper resource allocation.
 - Pin the Immich image tag to a specific version (e.g., `v1.131.3`) instead of `release` to avoid unexpected version changes.
 
