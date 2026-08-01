@@ -23,6 +23,8 @@ spec:
               value: "false"
             - name: IMMICH_TELEMETRY_INCLUDE_SENSITIVE
               value: "false"
+            - name: REVERSE_GEOCODING_ENABLED
+              value: "false"
             - name: DB_HOSTNAME
               value: localhost
             - name: DB_USERNAME
