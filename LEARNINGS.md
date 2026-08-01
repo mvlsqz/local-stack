@@ -309,7 +309,48 @@ curl -I -H "Host: photos.hub01.quetzal-quillback.ts.net" http://$TRAEFIK_IP
 
 ### Options for Remote Access
 
-#### Option 1: Tailscale Serve (simple, private to tailnet)
+#### Option 1: Tailscale Kubernetes Operator (recommended)
+
+Install the operator inside the vCluster and expose each service with a Kubernetes `Ingress` that uses `ingressClassName: tailscale`. The operator automatically creates a Tailscale device and MagicDNS name for each Ingress, and provisions a TLS certificate.
+
+```yaml
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: forgejo
+  namespace: forgejo
+spec:
+  ingressClassName: tailscale
+  tls:
+    - hosts:
+        - git.hub01
+  rules:
+    - http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: forgejo
+                port:
+                  number: 3000
+```
+
+The operator exposes the service at `https://git.hub01.quetzal-quillback.ts.net`.
+
+Install the operator:
+
+```bash
+# 1. Create tags and OAuth client in the Tailscale admin console
+# 2. Download the manifest
+curl -L -o operator.yaml https://raw.githubusercontent.com/tailscale/tailscale/main/cmd/k8s-operator/deploy/manifests/operator.yaml
+
+# 3. Edit the manifest with OAuth client_id and client_secret
+# 4. Apply
+kubectl apply -f operator.yaml
+```
+
+#### Option 2: Tailscale Serve (simple, private to tailnet)
 
 Expose the Traefik port on `hub01` under the machine's Tailscale name:
 
@@ -323,28 +364,25 @@ Then access services by passing the Ingress `Host` header:
 curl -I -H "Host: git.hub01.quetzal-quillback.ts.net" https://hub01.quetzal-quillback.ts.net
 ```
 
-#### Option 2: Tailscale Funnel (public internet, Tailscale-authenticated)
+#### Option 3: Tailscale Funnel (public internet, Tailscale-authenticated)
 
 ```bash
 sudo tailscale funnel --bg --set-path=/ http://localhost:80
 ```
 
-#### Option 3: Separate Tailscale Serve Hosts for Each Service
-
-Use `tailscale serve` with different ports or paths and point a local reverse proxy to each service. For example, map `/git` to Forgejo, `/draw` to Excalidraw, and `/photos` to Immich.
-
 #### Option 4: Custom DNS with Subdomains
 
-If you want the exact `git.hub01...` subdomains, you need to manage DNS records yourself (e.g., via a public DNS provider or a custom DNS server that Tailscale uses as a split DNS server). This is more complex and usually not needed for a homelab.
+If you want the exact `git.hub01...` subdomains without the operator, you need to manage DNS records yourself (e.g., via a public DNS provider or a custom DNS server). This is more complex and usually not needed for a homelab.
 
 ### Takeaway
 
 - Tailscale MagicDNS only resolves the machine name, not arbitrary subdomains for services inside the cluster.
-- To expose services, use Tailscale serve/funnel on `hub01` or manage external DNS records.
+- The Tailscale Kubernetes Operator is the cleanest way to expose services with per-service MagicDNS names and TLS certificates.
 - For testing, use the Traefik cluster IP with the correct `Host` header.
 
 ### References
 
+- [Tailscale Kubernetes Operator](https://tailscale.com/docs/kubernetes-operator)
 - [Tailscale Serve](https://tailscale.com/kb/1242/tailscale-serve)
 - [Tailscale Funnel](https://tailscale.com/kb/1223/tailscale-funnel)
 - [Tailscale MagicDNS](https://tailscale.com/kb/1081/magicdns)
