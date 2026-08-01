@@ -179,7 +179,66 @@ data:
     }
 ```
 
-After updating the ConfigMap, restart the provisioner and delete the old PVCs so they are re-provisioned:
+The path must also be on a directory that is mounted from the host into the vCluster. The vCluster Docker driver only mounts `/data/vcluster` by default, so the local-path-provisioner should use `/data/vcluster/k8s-volumes` instead of `/data/k8s-volumes`. Otherwise, the helper pods write to the vCluster container's overlay filesystem, which is not persistent and can cause timeouts.
+
+Also, the provisioner needs `pods/log` permission to read helper pod logs.
+
+### Fix
+
+Change the `nodePathMap` entry in the ConfigMap:
+
+```yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: local-path-config
+  namespace: local-path-storage
+data:
+  config.json: |
+    {
+      "nodePathMap": [
+        {
+          "node": "DEFAULT_PATH_FOR_NON_LISTED_NODES",
+          "paths": ["/data/vcluster/k8s-volumes"]
+        }
+      ]
+    }
+  helperPod.yaml: |
+    apiVersion: v1
+    kind: Pod
+    metadata:
+      name: helper-pod
+    spec:
+      containers:
+        - name: helper-pod
+          image: busybox
+          imagePullPolicy: IfNotPresent
+```
+
+Update the Deployment volume mount and hostPath:
+
+```yaml
+volumeMounts:
+  - name: local-path-base
+    mountPath: /data/vcluster/k8s-volumes
+
+volumes:
+  - name: local-path-base
+    hostPath:
+      path: /data/vcluster/k8s-volumes
+      type: DirectoryOrCreate
+```
+
+Update the RBAC to allow reading helper pod logs:
+
+```yaml
+rules:
+  - apiGroups: [""]
+    resources: ["endpoints", "persistentvolumes", "pods", "pods/log"]
+    verbs: ["*"]
+```
+
+After updating the manifests, restart the provisioner and delete the old PVCs so they are re-provisioned:
 
 ```bash
 kubectl rollout restart deployment/local-path-provisioner -n local-path-storage
@@ -194,19 +253,23 @@ kubectl delete pvc --all -n vcluster-platform
 kubectl get pvc -A
 kubectl get pv
 kubectl logs -n local-path-storage deployment/local-path-provisioner
+ls -la /data/vcluster/k8s-volumes
 ```
 
-PVCs should move from `Pending` to `Bound`, and PVs should be created under `/data/k8s-volumes`.
+PVCs should move from `Pending` to `Bound`, and PVs should be created under `/data/vcluster/k8s-volumes` on the host.
 
 ### Takeaway
 
 - Use `DEFAULT_PATH_FOR_NON_LISTED_NODES` when you want a single path for all nodes that are not explicitly named in the `nodePathMap`.
 - Use `DEFAULT_PATH_FOR_ALL_LISTED_NODES` only when you have explicit node entries and want them to share the same path.
 - The local-path-provisioner error message is explicit: read the key it asks for and update the ConfigMap accordingly.
+- In a vCluster Docker setup, ensure the local-path base directory is mounted from the host. Otherwise, data is not persistent and helper pods may time out.
+- The local-path-provisioner service account needs `pods/log` access to read helper pod logs.
 
 ### References
 
 - [local-path-provisioner Configuration](https://github.com/rancher/local-path-provisioner#configuration)
+- [vCluster Docker Driver Volumes](https://www.vcluster.com/docs/vcluster/deploy/topology/single-node-hybrid/docker)
 
 ---
 
