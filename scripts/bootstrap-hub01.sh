@@ -1,17 +1,20 @@
 #!/bin/bash
 set -euo pipefail
 
-HUB01_IP="192.168.68.66"
-DATA_MOUNT="/vcluster"
+SCRIPT_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
+REPO_ROOT=$(dirname -- "$SCRIPT_DIR")
+VCLUSTER_NAME="hub01"
+VCLUSTER_VOLUME="/vcluster"
+VCLUSTER_CONFIG="$REPO_ROOT/vcluster.yaml"
 
 echo "=== Bootstrap hub01 ==="
 
-# Ensure /vcluster is mounted
-if ! mountpoint -q "$DATA_MOUNT"; then
-  echo "ERROR: $DATA_MOUNT is not mounted. Mount the dedicated disk first."
+# Ensure the vCluster volume is mounted
+if ! mountpoint -q "$VCLUSTER_VOLUME"; then
+  echo "ERROR: $VCLUSTER_VOLUME is not mounted. Mount the dedicated disk first."
   exit 1
 fi
-mkdir -p "$DATA_MOUNT"
+mkdir -p "$VCLUSTER_VOLUME"
 
 # Install Docker
 if ! command -v docker &> /dev/null; then
@@ -29,14 +32,6 @@ if ! docker info &> /dev/null; then
   exit 1
 fi
 
-# Install Tailscale
-if ! command -v tailscale &> /dev/null; then
-  echo "Installing Tailscale..."
-  sudo pacman -S --noconfirm tailscale
-  sudo systemctl enable --now tailscaled
-  echo "Run 'sudo tailscale up' to authenticate."
-fi
-
 # Install vCluster CLI
 if ! command -v vcluster &> /dev/null; then
   echo "Installing vCluster CLI..."
@@ -49,7 +44,10 @@ fi
 vcluster use driver docker
 
 echo "=== Bootstrap complete ==="
-echo "Next steps:"
-echo "1. Authenticate Tailscale: sudo tailscale up"
-echo "2. Provision vCluster: vcluster create hub01 --values vcluster.yaml"
-echo "3. Install Argo CD and Flux CD"
+read -r -p "Create vCluster '$VCLUSTER_NAME' now? [y/N] " CREATE_VCLUSTER
+
+if [[ "$CREATE_VCLUSTER" =~ ^[Yy]$ ]]; then
+  vcluster create "$VCLUSTER_NAME" --values "$VCLUSTER_CONFIG"
+else
+  echo "Cluster creation skipped. Run the script again when the host is ready."
+fi
