@@ -4,7 +4,7 @@ experimental:
     nodes:
       - name: hub01
     volumes:
-      - /data/vcluster:/data/vcluster
+      - /vcluster:/vcluster
 controlPlane:
   distro:
     k8s:
