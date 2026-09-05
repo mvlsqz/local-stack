@@ -2,9 +2,7 @@
 experimental:
   docker:
     nodes:
-      - name: hub01
-    volumes:
-      - /vcluster:/vcluster
+      - name: hub1
 controlPlane:
   distro:
     k8s:

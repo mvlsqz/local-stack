@@ -2,12 +2,11 @@ apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
   name: forgejo
-  namespace: forgejo
 spec:
   ingressClassName: tailscale
   tls:
     - hosts:
-        - git.hub01
+        - git.hub1
   rules:
     - http:
         paths:

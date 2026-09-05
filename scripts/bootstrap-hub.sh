@@ -3,18 +3,10 @@ set -euo pipefail
 
 SCRIPT_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
 REPO_ROOT=$(dirname -- "$SCRIPT_DIR")
-VCLUSTER_NAME="hub01"
-VCLUSTER_VOLUME="/vcluster"
+VCLUSTER_NAME="hub"
 VCLUSTER_CONFIG="$REPO_ROOT/vcluster.yaml"
 
-echo "=== Bootstrap hub01 ==="
-
-# Ensure the vCluster volume is mounted
-if ! mountpoint -q "$VCLUSTER_VOLUME"; then
-  echo "ERROR: $VCLUSTER_VOLUME is not mounted. Mount the dedicated disk first."
-  exit 1
-fi
-mkdir -p "$VCLUSTER_VOLUME"
+echo "=== Bootstrap hub ==="
 
 # Install Docker
 if ! command -v docker &> /dev/null; then
@@ -42,6 +34,17 @@ fi
 
 # Set Docker as vCluster driver
 vcluster use driver docker
+
+# Check for recovered Docker-backed state before offering cluster creation.
+if ! VCLUSTER_LIST=$(vcluster list --driver docker --output json); then
+  echo "ERROR: Could not inspect Docker-backed vClusters. Refusing to create or replace recovered state."
+  exit 1
+fi
+if printf '%s\n' "$VCLUSTER_LIST" | grep -Eq '"name"[[:space:]]*:[[:space:]]*"hub"'; then
+  echo "Recovered Docker-backed vCluster '$VCLUSTER_NAME' already exists."
+  echo "Cluster creation skipped; use the existing cluster and verify it separately."
+  exit 0
+fi
 
 echo "=== Bootstrap complete ==="
 read -r -p "Create vCluster '$VCLUSTER_NAME' now? [y/N] " CREATE_VCLUSTER
