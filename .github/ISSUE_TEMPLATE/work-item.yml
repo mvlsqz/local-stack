@@ -1,0 +1,37 @@
+name: Homelab work item
+description: Track homelab remediation, setup, or maintenance work.
+title: "[Work] "
+body:
+  - type: textarea
+    id: objective
+    attributes:
+      label: Objective
+      description: State the result this work item should achieve.
+      placeholder: Describe the intended outcome.
+    validations:
+      required: true
+
+  - type: textarea
+    id: acceptance-criteria
+    attributes:
+      label: Acceptance criteria
+      description: List the measurable conditions that indicate the objective is complete.
+      placeholder: |-
+        - [ ]
+        - [ ]
+    validations:
+      required: true
+
+  - type: textarea
+    id: scope
+    attributes:
+      label: Scope
+      description: Identify the systems, files, or boundaries affected by this work.
+      placeholder: Describe what is in scope and out of scope.
+
+  - type: textarea
+    id: notes
+    attributes:
+      label: Notes
+      description: Add relevant context, dependencies, risks, or references.
+      placeholder: Add supporting details if needed.

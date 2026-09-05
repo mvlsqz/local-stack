@@ -2,16 +2,16 @@
 set -euo pipefail
 
 HUB01_IP="192.168.68.66"
-DATA_MOUNT="/data"
+DATA_MOUNT="/vcluster"
 
 echo "=== Bootstrap hub01 ==="
 
-# Ensure /data is mounted
+# Ensure /vcluster is mounted
 if ! mountpoint -q "$DATA_MOUNT"; then
   echo "ERROR: $DATA_MOUNT is not mounted. Mount the dedicated disk first."
   exit 1
 fi
-mkdir -p "$DATA_MOUNT/vcluster"
+mkdir -p "$DATA_MOUNT"
 
 # Install Docker
 if ! command -v docker &> /dev/null; then
