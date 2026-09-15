@@ -7,4 +7,4 @@ controlPlane:
   distro:
     k8s:
       image:
-        tag: v1.30.0
+        tag: v1.33.0
