@@ -60,6 +60,30 @@ NFS was chosen because:
 
 The tradeoff is that NFS provides file storage rather than block storage. Forgejo's SQLite behavior must therefore be validated carefully.
 
+## Host NFS and firewall setup
+
+Configure the host export before bootstrapping a fresh vCluster. The Docker-backed vCluster uses the `172.18.0.0/16` network, and its bridge name changes when the disposable cluster is recreated.
+
+```bash
+printf '%s\n' \
+  '/srv/cluster-data 172.18.0.0/16(rw,sync,no_subtree_check,no_root_squash)' \
+  | sudo tee /etc/exports.d/cluster-data.exports
+
+sudo exportfs -ra
+sudo ufw allow from 172.18.0.0/16 to any port 2049 proto tcp
+sudo ufw reload
+```
+
+The export is restricted to the vCluster network. `no_root_squash` is required because the Forgejo image's SSH supervisor creates and owns host keys under `/data/ssh` as root. Do not broaden the export or firewall rule beyond the trusted vCluster network.
+
+Verify the host-side export before creating the cluster:
+
+```bash
+showmount -e 172.18.0.1
+```
+
+The NFS client on every vCluster node must be able to reach TCP port `2049` on `172.18.0.1`.
+
 ## Workload storage
 
 ### Forgejo
@@ -138,6 +162,8 @@ Attach the physical disk
 Mount it at /srv/cluster-data
     ↓
 Start the host NFS service
+    ↓
+Configure the NFS export and firewall rule
     ↓
 Create a fresh vCluster named hub
     ↓
