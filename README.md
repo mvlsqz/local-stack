@@ -94,7 +94,15 @@ Flux
 CSI, storage resources, workloads, and services
 ```
 
-Argo CD is not part of the required architecture. Existing Argo configuration is historical and will be removed or replaced as the Flux migration progresses.
+Argo CD is not part of the required architecture, and its repository configuration has been removed.
+
+Flux is bootstrapped from the repository root with the cluster topology path:
+
+```bash
+flux bootstrap github ... --branch=main --path=./clusters/hub
+```
+
+Bootstrap installs the Flux controllers and commits the generated `flux-system` manifests. Those controller manifests are bootstrap output, not hand-authored repository configuration. The cluster-level Flux `Kustomization` resources reconcile `platform` before `apps`; platform resources can therefore be added without changing the cluster topology.
 
 ## Workload exposure
 
@@ -107,6 +115,8 @@ ingressClassName: tailscale
 ```
 
 The project does not require Gateway API, Traefik, public LoadBalancer services, or NodePort exposure. Application access remains private to the Tailscale network.
+
+The Tailscale Operator requires a securely provisioned OAuth Secret named `operator-oauth` in the `tailscale` namespace before or alongside Flux reconciliation. Provision it with SOPS, an external-secrets workflow, or another out-of-band mechanism; never commit its credentials to Git. All Kubernetes nodes also need NFS client support for the NFS CSI driver and the existing static volume.
 
 ## Namespace policy
 
@@ -131,13 +141,12 @@ Start the host NFS service
     ↓
 Create a fresh vCluster named hub
     ↓
-Install the NFS CSI driver
+Bootstrap Flux with `--path=./clusters/hub`
     ↓
-Bootstrap Flux
+Reconcile platform resources, including the NFS CSI driver
     ↓
-Recreate PV and PVC definitions
+Reconcile applications
     ↓
-Recreate workloads
     ↓
 Reattach Forgejo data
     ↓
