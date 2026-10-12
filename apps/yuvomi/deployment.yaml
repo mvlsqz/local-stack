@@ -22,6 +22,10 @@ spec:
           env:
             - name: NODE_ENV
               value: production
+            - name: DB_PATH
+              value: /data/yuvomi.db
+            - name: BACKUP_DIR
+              value: /backups
             - name: SESSION_SECURE
               value: "true"
             - name: TRUST_PROXY
