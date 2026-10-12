@@ -1,0 +1,63 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: yuvomi
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: yuvomi
+  template:
+    metadata:
+      labels:
+        app: yuvomi
+    spec:
+      containers:
+        - name: yuvomi
+          image: ghcr.io/ulsklyc/yuvomi:latest
+          ports:
+            - containerPort: 3000
+          env:
+            - name: NODE_ENV
+              value: production
+            - name: SESSION_SECURE
+              value: "true"
+            - name: TRUST_PROXY
+              value: "1"
+          envFrom:
+            - secretRef:
+                name: yuvomi-secrets
+          volumeMounts:
+            - name: data
+              mountPath: /data
+              subPath: data
+            - name: data
+              mountPath: /backups
+              subPath: backups
+            - name: data
+              mountPath: /app/modules
+              subPath: modules
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 3000
+            periodSeconds: 30
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 3000
+            initialDelaySeconds: 30
+            periodSeconds: 30
+          resources:
+            requests:
+              memory: "256Mi"
+              cpu: "100m"
+            limits:
+              memory: "512Mi"
+              cpu: "500m"
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: yuvomi-data-pvc

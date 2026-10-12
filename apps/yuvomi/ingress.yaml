@@ -1,0 +1,19 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: yuvomi
+spec:
+  ingressClassName: tailscale
+  tls:
+    - hosts:
+        - yuvomi.hub1
+  rules:
+    - http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: yuvomi
+                port:
+                  number: 3000

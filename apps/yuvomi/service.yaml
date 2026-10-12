@@ -1,0 +1,10 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: yuvomi
+spec:
+  selector:
+    app: yuvomi
+  ports:
+    - port: 3000
+      targetPort: 3000

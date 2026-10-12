@@ -1,0 +1,33 @@
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: yuvomi-data-pv
+spec:
+  capacity:
+    storage: 10Gi
+  accessModes:
+    - ReadWriteOnce
+  persistentVolumeReclaimPolicy: Retain
+  storageClassName: nfs-static
+  mountOptions:
+    - nfsvers=4.1
+  csi:
+    driver: nfs.csi.k8s.io
+    volumeHandle: 172.18.0.1#/srv/cluster-data#yuvomi
+    volumeAttributes:
+      server: 172.18.0.1
+      share: /srv/cluster-data
+      subDir: yuvomi
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: yuvomi-data-pvc
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 10Gi
+  volumeName: yuvomi-data-pv
+  storageClassName: nfs-static
